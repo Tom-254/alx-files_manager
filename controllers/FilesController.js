@@ -1,14 +1,16 @@
 import { tmpdir } from 'os';
 import { promisify } from 'util';
+import Queue from 'bull/lib/queue';
 import { v4 as uuidv4 } from 'uuid';
 import {
   mkdir, writeFile, stat, existsSync, realpath,
 } from 'fs';
 import { join as joinPath } from 'path';
+import { Request, Response } from 'express';
 import { contentType } from 'mime-types';
 import mongoDBCore from 'mongodb/lib/core';
 import dbClient from '../utils/db';
-import { UserFromXToken } from '../utils/auth';
+import { getUserFromXToken } from '../utils/auth';
 
 const VALID_FILE_TYPES = {
   folder: 'folder',
@@ -22,6 +24,7 @@ const writeFileAsync = promisify(writeFile);
 const statAsync = promisify(stat);
 const realpathAsync = promisify(realpath);
 const MAX_FILES_PER_PAGE = 20;
+const fileQueue = new Queue('thumbnail generation');
 const NULL_ID = Buffer.alloc(24, '0').toString('utf-8');
 const isValidId = (id) => {
   const size = 24;
@@ -89,7 +92,8 @@ export default class FilesController {
     const baseDir = `${process.env.FOLDER_PATH || ''}`.trim().length > 0
       ? process.env.FOLDER_PATH.trim()
       : joinPath(tmpdir(), DEFAULT_ROOT_FOLDER);
-
+    // default baseDir == '/tmp/files_manager'
+    // or (on Windows) '%USERPROFILE%/AppData/Local/Temp/files_manager';
     const newFile = {
       userId: new mongoDBCore.BSON.ObjectId(userId),
       name,
@@ -108,7 +112,11 @@ export default class FilesController {
     const insertionInfo = await (await dbClient.filesCollection())
       .insertOne(newFile);
     const fileId = insertionInfo.insertedId.toString();
-
+    // start thumbnail generation worker
+    if (type === VALID_FILE_TYPES.image) {
+      const jobName = `Image thumbnail [${userId}-${fileId}]`;
+      fileQueue.add({ userId, fileId, name: jobName });
+    }
     res.status(201).json({
       id: fileId,
       userId,
@@ -248,7 +256,7 @@ export default class FilesController {
    * Retrieves the content of a file.
    */
   static async getFile(req, res) {
-    const user = await UserFromXToken(req);
+    const user = await getUserFromXToken(req);
     const { id } = req.params;
     const size = req.query.size || null;
     const userId = user ? user._id.toString() : '';
