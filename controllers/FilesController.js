@@ -1,15 +1,18 @@
+/* eslint-disable import/no-named-as-default */
+/* eslint-disable no-unused-vars */
 import { tmpdir } from 'os';
 import { promisify } from 'util';
-import { v4 as uuidv4 } from 'uuid';
 import Queue from 'bull/lib/queue';
+import { v4 as uuidv4 } from 'uuid';
 import {
   mkdir, writeFile, stat, existsSync, realpath,
 } from 'fs';
 import { join as joinPath } from 'path';
+import { Request, Response } from 'express';
 import { contentType } from 'mime-types';
 import mongoDBCore from 'mongodb/lib/core';
 import dbClient from '../utils/db';
-import { UserFromXToken } from '../utils/auth';
+import { getUserFromXToken } from '../utils/auth';
 
 const VALID_FILE_TYPES = {
   folder: 'folder',
@@ -51,6 +54,8 @@ const isValidId = (id) => {
 export default class FilesController {
   /**
    * Uploads a file.
+   * @param {Request} req The Express request object.
+   * @param {Response} res The Express response object.
    */
   static async postUpload(req, res) {
     const { user } = req;
@@ -91,7 +96,8 @@ export default class FilesController {
     const baseDir = `${process.env.FOLDER_PATH || ''}`.trim().length > 0
       ? process.env.FOLDER_PATH.trim()
       : joinPath(tmpdir(), DEFAULT_ROOT_FOLDER);
-
+    // default baseDir == '/tmp/files_manager'
+    // or (on Windows) '%USERPROFILE%/AppData/Local/Temp/files_manager';
     const newFile = {
       userId: new mongoDBCore.BSON.ObjectId(userId),
       name,
@@ -110,12 +116,11 @@ export default class FilesController {
     const insertionInfo = await (await dbClient.filesCollection())
       .insertOne(newFile);
     const fileId = insertionInfo.insertedId.toString();
-
+    // start thumbnail generation worker
     if (type === VALID_FILE_TYPES.image) {
       const jobName = `Image thumbnail [${userId}-${fileId}]`;
       fileQueue.add({ userId, fileId, name: jobName });
     }
-
     res.status(201).json({
       id: fileId,
       userId,
@@ -156,6 +161,8 @@ export default class FilesController {
 
   /**
    * Retrieves files associated with a specific user.
+   * @param {Request} req The Express request object.
+   * @param {Response} res The Express response object.
    */
   static async getIndex(req, res) {
     const { user } = req;
@@ -253,9 +260,11 @@ export default class FilesController {
 
   /**
    * Retrieves the content of a file.
+   * @param {Request} req The Express request object.
+   * @param {Response} res The Express response object.
    */
   static async getFile(req, res) {
-    const user = await UserFromXToken(req);
+    const user = await getUserFromXToken(req);
     const { id } = req.params;
     const size = req.query.size || null;
     const userId = user ? user._id.toString() : '';
