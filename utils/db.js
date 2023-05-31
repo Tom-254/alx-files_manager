@@ -1,5 +1,5 @@
-import {MongoClient} from 'mongodb';
-import {default as LoadEnvironmentVariables }  from './load_env_vars';
+import { MongoClient } from 'mongodb';
+import LoadEnvVars from './load_env_vars';
 
 /**
  * Represents a Database client in Mongo.
@@ -9,7 +9,7 @@ class DBClient {
    * Creates DBClient instance.
    */
   constructor() {
-    LoadEnvironmentVariables();
+    LoadEnvVars();
     const host = process.env.DB_HOST || 'localhost';
     const port = process.env.DB_PORT || 27017;
     const database = process.env.DB_DATABASE || 'files_manager';
@@ -55,5 +55,5 @@ class DBClient {
   }
 }
 
-export const dbClient = new DBClient();
+const dbClient = new DBClient();
 export default dbClient;
