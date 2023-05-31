@@ -6,11 +6,10 @@ import {
   mkdir, writeFile, stat, existsSync, realpath,
 } from 'fs';
 import { join as joinPath } from 'path';
-import { Request, Response } from 'express';
 import { contentType } from 'mime-types';
 import mongoDBCore from 'mongodb/lib/core';
 import dbClient from '../utils/db';
-import { getUserFromXToken } from '../utils/auth';
+import { UserFromXToken } from '../utils/auth';
 
 const VALID_FILE_TYPES = {
   folder: 'folder',
@@ -256,7 +255,7 @@ export default class FilesController {
    * Retrieves the content of a file.
    */
   static async getFile(req, res) {
-    const user = await getUserFromXToken(req);
+    const user = await UserFromXToken(req);
     const { id } = req.params;
     const size = req.query.size || null;
     const userId = user ? user._id.toString() : '';
